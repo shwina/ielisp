@@ -7,9 +7,11 @@
 
 (setq iel--connection-info (json-read-file (car argv)))
 
+;; generate UUID
 (defun iel--uuidgen ()
   (replace-regexp-in-string "\n" "" (shell-command-to-string "uuidgen")))
 
+;; generate a message header given a `msg_type`
 (defun iel--msg-header (msg-type)
   (json-encode-alist
    `((session . ,iel--session-id)
@@ -18,10 +20,13 @@
      (msg_type . ,msg-type)
      (version . "5.0"))))
 
+;; construct and send a message on socket
 (defun iel--send (socket msg-type content parent-header metadata identities)
-
-(defun iel--shell-handler (msg)
-  (let* (
+  (let* ((header (iel--msg-header msg-type))
+         (delimiter iel--delimiter)
+         (signature "")
+         (msgs (append identities delimiter signature header parent-header metadata content)))
+    (zmq-send-multipart socket msgs)))
 
 (defun iel--bind-addr (port)
   (let* ((transport (cdr (assoc 'transport iel--connection-info)))
@@ -29,7 +34,8 @@
          (port (cdr (assoc-string port iel--connection-info))))
     (format "%s://%s:%s" transport ip port)))
 
-(setq iel--session-id (iel--uuidgen))
+(setq iel--session-id (iel--uuidgen)) ;; per session UUID
+(setq iel--delimiter "<IDS|MSG>") ;; the delimiter between identities and message
 
 (let* ((iel--context (zmq-context))
        (iel--shell-socket (zmq-socket iel--context zmq-ROUTER))
