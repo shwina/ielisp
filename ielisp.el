@@ -64,11 +64,10 @@
       (let* ((content '(("protocol_version" . "5.3")
                         ("implementation" . "ielisp")
                         ("implementation_version" . "0.1")
-                        ("language_info" .
-                         '(("name" . "elisp")
-                           ("version" . "unknown")
-                           ("mimetype" . "text/plain")
-                           ("file_extension" . ".el")))
+                        ("language_info" .(("name" . "elisp")
+                                           ("version" . "unknown")
+                                           ("mimetype" . "text/plain")
+                                           ("file_extension" . ".el")))
                         ("banner" . ""))))
         (iel--send iel--shell-socket "kernel_info_reply" content parent-header nil identities)))))
                        
