@@ -11,6 +11,10 @@
 (defun iel--uuidgen ()
   (replace-regexp-in-string "\n" "" (shell-command-to-string "uuidgen")))
 
+;; evaluate string and return result as string
+(defun iel--eval-string (code)
+  (format "%s" (eval (car (read-from-string code)))))
+
 ;; generate a message header given a `msg_type`
 (defun iel--msg-header (msg-type)
   (json-encode-alist
@@ -18,7 +22,7 @@
      (msg_id . ,(iel--uuidgen))
      (date . ,(format-time-string "%FT%T%z"))
      (msg_type . ,msg-type)
-     (username . "kernel")
+     (username . "ashwint")
      (version . "5.3"))))
 
 ;; generate bind address
@@ -29,20 +33,20 @@
     (format "%s://%s:%s" transport ip port)))
 
 ;; construct and send a message on socket
-(defun iel--send (socket msg-type content parent-header metadata identities)
-  (message "%s" content)
-  (message "---")
+(defun iel--send (socket msg-type &optional content parent-header metadata identities)
   (let* ((header (iel--msg-header msg-type))
          (delimiter iel--delimiter)
          (signature "") ;; TODO
+         (content (if (null content) (json-encode-alist nil) (json-encode content)))
+         (parent-header (if (null parent-header) (json-encode-alist nil) (json-encode parent-header)))
+         (metadata (if (null metadata) (json-encode-alist nil) (json-encode metadata)))
          (msgs (append identities (list
                                    delimiter
                                    signature
                                    header
-                                   (json-encode parent-header)
-                                   (json-encode metadata)
-                                   (json-encode content)))))
-    (message "%s" msgs)
+                                   parent-header
+                                   metadata
+                                   content))))
     (zmq-send-multipart socket msgs)))
 
 ;; deserialize msgs, retuning a list of identities and an alist
@@ -59,8 +63,10 @@
   (let* ((deserialized-msg (iel--deserialize msg))
          (identities (car deserialized-msg))
          (msg (cadr deserialized-msg))
-         (parent-header (cdr (assoc 'header msg))))
-    (when (equal (cdr (assoc 'msg_type parent-header)) "kernel_info_request")
+         (parent-header (cdr (assoc 'header msg)))
+         (msg-type (cdr (assoc 'msg_type parent-header)))
+         (code (cdr (assoc 'code (cdr (assoc 'content msg))))))
+    (when (equal msg-type "kernel_info_request")
       (let* ((content '(("protocol_version" . "5.3")
                         ("implementation" . "ielisp")
                         ("implementation_version" . "0.1")
@@ -69,46 +75,40 @@
                                            ("mimetype" . "text/plain")
                                            ("file_extension" . ".el")))
                         ("banner" . ""))))
-        (iel--send iel--shell-socket "kernel_info_reply" content parent-header nil identities)))))
-                       
-    ;; (when (eq (cdr (assoc "msg_type" parent-header)) "execute_request")
-    ;;   ;; publish that we are busy on IOPub
-    ;;   (iel--send
-    ;;    iel--iopub-socket
-    ;;    "status"
-    ;;    '(("execution_state" . "busy"))
-    ;;    parent-header
-    ;;    nil
-    ;;    nil)
-    ;;   ;; publish the result
-    ;;   (iel--send
-    ;;    iel--iopub-socket
-    ;;    "execute_result"
-    ;;    `(("execution_count" . ,iel--execution-count)
-    ;;      ("data" . (("text/plain" . "result!")))
-    ;;      ("metatadata" . nil))
-    ;;    parent-header
-    ;;    nil
-    ;;    nil) ; parent header
-    ;;   ;; reply
-    ;;   (let* ((metadata nilp)
-    ;;          (content `(("status" . "ok")
-    ;;                     ("execution_count" . ,iel--execution-count)
-    ;;                     ("user_variables" . nil)
-    ;;                     ("payload" . [])
-    ;;                     ("user_expressions" . nil))))
-    ;;     (iel--send
-    ;;      iel--shell-socket
-    ;;      "execute_reply"
-    ;;      content
-    ;;      parent-header
-    ;;      metadata       
-    ;;      identities))
-    ;;   (+ 1 iel--execution-count))))
+        (iel--send iel--shell-socket "kernel_info_reply" content parent-header nil identities))
+      (let* ((content '(("execution_state" . "idle"))))
+        (iel--send iel--iopub-socket "status" content parent-header)))
+
+    (when (equal msg-type "execute_request")
+      ;; publish that we are busy on IOPub
+      (let* ((content '(("execution_state" . "busy"))))
+        (iel--send iel--iopub-socket "status" content parent-header))
+      ;; publish the execution input
+      (let* ((content `(("execution_count" . ,iel--execution-count)
+                        ("code" . ,code))))
+        (iel--send iel--iopub-socket "execute_input" content parent-header))
+      ;; publish the result
+      (let* ((content `(("execution_count" . ,iel--execution-count)
+                        ("data" . (("text/plain" . ,(iel--eval-string code))))
+                        ("metatadata" . nil))))
+        (iel--send iel--iopub-socket "execute_result" content parent-header))
+      ;; publish that we are idle on IOPub
+      (let* ((content '(("execution_state" . "idle"))))
+        (iel--send iel--iopub-socket "status" content parent-header))
+      ;; reply
+      (let* ((content `(("status" . "ok")
+                        ("execution_count" . ,iel--execution-count)
+                        ("user_variables" . ,(json-encode-alist nil))
+                        ("payload" . [])
+                        ("user_expressions" . ,(json-encode-alist nil)))))
+        (iel--send iel--shell-socket "execute_reply" content parent-header nil identities))
+      (+ 1 iel--execution-count))))
+
+
 
 (setq iel--session-id (iel--uuidgen)) ;; per session UUID
 (setq iel--delimiter "<IDS|MSG>") ;; the delimiter between identities and message
-(setq iel--execution-count 0)
+(setq iel--execution-count 1)
 
 (let* ((iel--context (zmq-context))
        (iel--shell-socket (zmq-socket iel--context zmq-ROUTER))
