@@ -3,7 +3,7 @@
 (package-initialize)
 
 (require 'json)
-n(require 'zmq)
+(require 'zmq)
 (require 'hex-util)
 (require 'hmac-def)
 
