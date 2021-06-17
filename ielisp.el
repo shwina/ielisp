@@ -1,11 +1,28 @@
 ;; ielisp.el
 
 (package-initialize)
+
 (require 'json)
-(require 'zmq)
+n(require 'zmq)
+(require 'hex-util)
+(require 'hmac-def)
+
 (setq debug-on-error t)
 
 (setq iel--connection-info (json-read-file (car argv)))
+
+;; TODOS:
+;; 2. Implement kernel interrupt/shutdown
+;; 3. Handling errors better
+;; 4. Installation
+
+(defun iel--sha256-binary (object)
+  (secure-hash 'sha256 object nil nil t))
+
+(define-hmac-function iel--hmac-sha256 iel--sha256-binary 64 32)
+
+(defun iel--hmac-sha256-hex (text key)
+   (encode-hex-string (iel--hmac-sha256 text key)))
 
 ;; generate UUID
 (defun iel--uuidgen ()
@@ -17,7 +34,7 @@
 
 ;; generate a message header given a `msg_type`
 (defun iel--msg-header (msg-type)
-  (json-encode-alist
+  (json-encode-alist ;; TODO: maybe don't encode here
    `((session . ,iel--session-id)
      (msg_id . ,(iel--uuidgen))
      (date . ,(format-time-string "%FT%T%z"))
@@ -32,14 +49,18 @@
          (port (cdr (assoc-string port iel--connection-info))))
     (format "%s://%s:%s" transport ip port)))
 
+(defun iel--sign (msg key)
+    (iel--hmac-sha256-hex msg key))
+
 ;; construct and send a message on socket
 (defun iel--send (socket msg-type &optional content parent-header metadata identities)
   (let* ((header (iel--msg-header msg-type))
          (delimiter iel--delimiter)
-         (signature "") ;; TODO
          (content (if (null content) (json-encode-alist nil) (json-encode content)))
          (parent-header (if (null parent-header) (json-encode-alist nil) (json-encode parent-header)))
          (metadata (if (null metadata) (json-encode-alist nil) (json-encode metadata)))
+         (key (cdr (assoc 'key iel--connection-info)))
+         (signature (iel--sign (concat header parent-header metadata content) key))
          (msgs (append identities (list
                                    delimiter
                                    signature
@@ -102,9 +123,7 @@
                         ("payload" . [])
                         ("user_expressions" . ,(json-encode-alist nil)))))
         (iel--send iel--shell-socket "execute_reply" content parent-header nil identities))
-      (+ 1 iel--execution-count))))
-
-
+      (setq iel--execution-count (+ 1 iel--execution-count)))))
 
 (setq iel--session-id (iel--uuidgen)) ;; per session UUID
 (setq iel--delimiter "<IDS|MSG>") ;; the delimiter between identities and message
@@ -128,5 +147,4 @@
       (setq msg (zmq-recv iel--hb-socket))
       (zmq-send iel--hb-socket msg)
       (setq msg (zmq-recv-multipart iel--shell-socket))
-      (iel--shell-handler msg)))
-)
+      (iel--shell-handler msg))))
