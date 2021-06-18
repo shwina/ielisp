@@ -1,6 +1,7 @@
 ;; ielisp.el
 
 (package-initialize)
+
 (require 'json)
 (require 'zmq)
 (require 'hex-util)
@@ -10,9 +11,11 @@
 (setq iel--connection-info (json-read-file (car argv)))
 
 ;; TODOS:
-;; 2. Implement kernel interrupt/shutdown
-;; 3. Handling errors better
-;; 4. Installation
+;; 0. Ensure script ends on exit (while loop)
+;; 1. Document
+;; 2. Installation
+;; 3. Executing code in a different environment
+
 
 (defun iel--sha256-binary (object)
   (secure-hash 'sha256 object nil nil t))
@@ -35,13 +38,12 @@
 
 ;; generate a message header given a `msg_type`
 (defun iel--msg-header (msg-type)
-  (json-encode-alist ;; TODO: maybe don't encode here
    `((session . ,iel--session-id)
      (msg_id . ,(iel--uuidgen))
      (date . ,(format-time-string "%FT%T%z"))
      (msg_type . ,msg-type)
      (username . "ashwint")
-     (version . "5.3"))))
+     (version . "5.3")))
 
 ;; generate bind address
 (defun iel--bind-addr (port)
@@ -55,7 +57,7 @@
 
 ;; construct and send a message on socket
 (defun iel--send (socket msg-type &optional content parent-header metadata identities)
-  (let* ((header (iel--msg-header msg-type))
+  (let* ((header (json-encode (iel--msg-header msg-type)))
          (delimiter iel--delimiter)
          (content (if (null content) (json-encode-alist nil) (json-encode content)))
          (parent-header (if (null parent-header) (json-encode-alist nil) (json-encode parent-header)))
