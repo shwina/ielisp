@@ -1,13 +1,11 @@
 ;; ielisp.el
 
 (package-initialize)
-
 (require 'json)
 (require 'zmq)
 (require 'hex-util)
 (require 'hmac-def)
 
-(setq debug-on-error t)
 
 (setq iel--connection-info (json-read-file (car argv)))
 
@@ -22,7 +20,7 @@
 (define-hmac-function iel--hmac-sha256 iel--sha256-binary 64 32)
 
 (defun iel--hmac-sha256-hex (text key)
-   (encode-hex-string (iel--hmac-sha256 text key)))
+   (encode-hex-string (iel--hmac-sha256 (string-as-unibyte text) key)))
 
 ;; generate UUID
 (defun iel--uuidgen ()
@@ -30,7 +28,10 @@
 
 ;; evaluate string and return result as string
 (defun iel--eval-string (code)
-  (format "%s" (eval (car (read-from-string code)))))
+  (format "%s"
+          (condition-case err
+              (eval (car (read-from-string code)))
+            (error (format "%s" (error-message-string err))))))
 
 ;; generate a message header given a `msg_type`
 (defun iel--msg-header (msg-type)
