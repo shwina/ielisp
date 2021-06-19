@@ -11,7 +11,7 @@
 (setq iel--connection-info (json-read-file (car argv)))
 
 ;; TODOS:
-;; 0. Ensure script ends on exit (while loop)
+;; 0. Ensure script ends on exit (while loop); maybe requires polling and non-blocking sends/recvs
 ;; 1. Document
 ;; 2. Installation
 ;; 3. Executing code in a different environment
@@ -83,6 +83,17 @@
                        (metadata . ,(json-read-from-string (seq-elt frames 2)))
                        (content . ,(json-read-from-string (seq-elt frames 3)))))))
 
+(defun iel--control-handler (msg)
+  (message "%s" msg)
+  (let* ((deserialized-msg (iel--deserialize msg))
+         (identities (car deserialized-msg))
+         (msg (cadr deserialized-msg))
+         (msg-type (cdr (assoc 'msg_type (cdr (assoc 'header msg))))))
+    (message msg-type)
+    (when (equal msg-type "shutdown_request")
+      (message "shutting down...")
+      (setq iel--running nil))))
+
 (defun iel--shell-handler (msg)
   (let* ((deserialized-msg (iel--deserialize msg))
          (identities (car deserialized-msg))
@@ -131,6 +142,7 @@
 (setq iel--session-id (iel--uuidgen)) ;; per session UUID
 (setq iel--delimiter "<IDS|MSG>") ;; the delimiter between identities and message
 (setq iel--execution-count 1)
+(setq iel--running 't)
 
 (let* ((iel--context (zmq-context))
        (iel--shell-socket (zmq-socket iel--context zmq-ROUTER))
@@ -146,8 +158,12 @@
   (zmq-bind iel--hb-socket (iel--bind-addr "hb_port"))
 
   (let (msg)
-    (while t
+    (while iel--running
       (setq msg (zmq-recv iel--hb-socket))
       (zmq-send iel--hb-socket msg)
+
+      
+      
+      (iel--control-handler msg)      
       (setq msg (zmq-recv-multipart iel--shell-socket))
       (iel--shell-handler msg))))
