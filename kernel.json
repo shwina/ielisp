@@ -1,6 +1,0 @@
-{
- "argv": ["/Applications/Emacs.app/Contents/MacOS/emacs", "--script", "ielisp.el",
-          "{connection_file}"],
- "display_name": "Emacs Lisp",
- "language": "elisp"
-}
