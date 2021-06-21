@@ -144,7 +144,7 @@ themselves (alists)."
       ;; publish the result
       (let* ((content `(("execution_count" . ,iel--execution-count)
                         ("data" . (("text/plain" . ,(iel--eval-string code))))
-                        ("metatadata" . nil))))
+                        ("metadata" . ,(json-encode-alist nil)))))
         (iel--send iel--iopub-socket "execute_result" content parent-header))
       ;; publish that we are idle on IOPub
       (let* ((content '(("execution_state" . "idle"))))
