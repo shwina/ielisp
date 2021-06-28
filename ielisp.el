@@ -126,7 +126,7 @@ themselves (alists)."
                         ("implementation_version" . "0.1")
                         ("language_info" .(("name" . "elisp")
                                            ("version" . "unknown")
-                                           ("mimetype" . "text/plain")
+                                           ("mimetype" . "text/x-elisp")
                                            ("file_extension" . ".el")))
                         ("banner" . ""))))
         (iel--send iel--shell-socket "kernel_info_reply" content parent-header nil identities))
