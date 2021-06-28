@@ -14,11 +14,11 @@
 
 * Install and/or ensure that you have the dependencies
 
-  - Emacs
-  - [Jupyter](https://github.com/jupyter/notebook).
+  - Emacs with dynamic modules support (build using `--with-modules`)
+  - [Jupyter](https://github.com/jupyter/notebook)
   - The Emacs package [`emacs-zmq`](https://github.com/nnicandro/emacs-zmq)
     and _its_ dependency [`libzmq`]. Note that you need a version of libzmq
-    built with DRAFT APIs.
+    built with DRAFT APIs
 
 * Once the dependecies are met, navigate to the `ielisp` directory
   and run the `install.py` script. If you use Jupyter in a virtualenv,
